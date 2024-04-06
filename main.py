@@ -1,28 +1,23 @@
-from qutip.qip.operations import snot
-import random
-
+from Analysis import *
 from Circuits import *
 from GatesAndChannels import *
-from Analysis import *
+from IonBackend import *
 
 
 def main():
-    channel_to_repeat_description = [([[tensor(snot(), snot())]], [0, 1])]
-    unitary_gate_to_repeat = three_qubit_circuit_assembler(channel_to_repeat_description, [[qeye(2)]])[0][0]
-    c1 = random.random() + 1j * random.random()
-    c2 = random.random() + 1j * random.random()
-    psi_prep = c1 * random.choice(unitary_gate_to_repeat.eigenstates()[1]) + c2 * random.choice(
-        unitary_gate_to_repeat.eigenstates()[1])
-    psi_prep = psi_prep / psi_prep.norm()
+    U_prep_description = get_Toff_superposition_preparation_subcircuit_dict()['11+,11-']
+    U_prep_description_ion = get_ion_subcircuit_description(U_prep_description)
+    U_meas_description_ion = get_dagger_subcircuit(U_prep_description_ion)
 
-    U_prep_gate = get_prep_gate(psi_prep)
-    U_prep_description = [([[U_prep_gate]], [1, 2, 3])]
-    U_meas_description = [([[U_prep_gate.dag()]], [1, 2, 3])]
-    list_of_one_qubit_noises = [*Kraus_amplitude_damping_channel(0.01), *Kraus_phase_damping_channel(0.01),
-                                *Kraus_depolarizing_channel(0.01)]
+    gate_to_repeat_description = [([[toffoli()]], [0, 1, 2])]
+    gate_to_repeat_description_ion = get_ion_subcircuit_description(gate_to_repeat_description)
 
-    L_array, measurements, prob = quantum_circuit_with_L_reps(U_prep_description, channel_to_repeat_description,
-                                                              U_meas_description, list_of_one_qubit_noises, L_max=100,
+    list_of_one_qubit_noises = [*Kraus_amplitude_damping_channel(0.001), *Kraus_depolarizing_channel(0.001),
+                                *Kraus_phase_damping_channel(0.001)]
+
+    L_array, measurements, prob = quantum_circuit_with_L_reps(U_prep_description_ion, gate_to_repeat_description_ion,
+                                                              U_meas_description_ion, list_of_one_qubit_noises,
+                                                              L_max=20,
                                                               N_s=1000)
 
     plot_measurements(L_array, measurements, prob)

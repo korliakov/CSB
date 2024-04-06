@@ -90,10 +90,22 @@ def Kraus_phase_damping_channel(p):
 def SWAP_12():
     """
     Returns:
-        SWAP gate to swap 1 and 2 qubits
+        3-qubit SWAP gate to swap 1 and 2 qubits (acts on 3 qubits)
     """
 
     return tensor(qeye(2), Qobj(np.array([[1, 0, 0, 0],
                                           [0, 0, 1, 0],
                                           [0, 1, 0, 0],
                                           [0, 0, 0, 1]]), dims=[[2, 2], [2, 2]]))
+
+
+def CH():
+    """
+    Returns:
+        2-qubit Controlled H gate (acts on 2 qubits)
+    """
+
+    return Qobj(np.array([[1, 0, 0, 0],
+                          [0, 1, 0, 0],
+                          [0, 0, 1 / np.sqrt(2), 1 / np.sqrt(2)],
+                          [0, 0, 1 / np.sqrt(2), -1 / np.sqrt(2)]]), dims=[[2, 2], [2, 2]])
