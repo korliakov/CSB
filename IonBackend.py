@@ -141,7 +141,7 @@ def get_ion_subcircuit_description(subcircuit_description):
                 raise Exception("Unknown 2-qubit gate")
         elif len(idx) == 3:
             if gate == toffoli():
-                ion_subcircuit.extend(Toff_gate_repr())
+                ion_subcircuit.extend([gate_description])
             else:
                 raise Exception("Unknown 3-qubit gate")
     return ion_subcircuit

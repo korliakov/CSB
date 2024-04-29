@@ -1,9 +1,13 @@
+import random
+
 import numpy as np
 from qutip import *
 from qutip.qip.operations import snot, cnot
 from tqdm import tqdm
 
+from Analysis import check_eig_similarity, get_noisy_eig_ampl
 from GatesAndChannels import SWAP_12, CH
+from IonBackend import get_ion_subcircuit_description
 
 
 def quantum_circuit(initial_dm, list_of_channels):
@@ -91,7 +95,7 @@ def three_qubit_circuit_assembler(circuit_description, list_of_one_qubit_noises)
 
 
 def quantum_circuit_with_L_reps(U_prep_description, channel_to_repeat_description, U_meas_description,
-                                list_of_one_qubit_noises,
+                                list_of_one_qubit_noises_for_prep_meas, list_of_one_qubit_noises_for_target,
                                 L_max=100, N_s=100):
     """
     Models quantum circuits with a repeating quantum channel
@@ -100,7 +104,8 @@ def quantum_circuit_with_L_reps(U_prep_description, channel_to_repeat_descriptio
         U_prep_description (list(tuple(list(list(qutip.qobj.Qobj)), list()))): preparation subcircuit description
         channel_to_repeat_description (list(tuple(list(list(qutip.qobj.Qobj)), list()))): channel to repeat subcircuit description
         U_meas_description (list(tuple(list(list(qutip.qobj.Qobj)), list()))): measurement subcircuit description
-        list_of_one_qubit_noises (list(list(qutip.qobj.Qobj))): list of Kraus operators for each noise type
+        list_of_one_qubit_noises_for_prep_meas (list(list(qutip.qobj.Qobj))): list of Kraus operators for each noise type acting on prep or measurement parts
+        list_of_one_qubit_noises_for_target (list(list(qutip.qobj.Qobj))): list of Kraus operators for each noise type acting on target qubit
         L_max (int): the maximum number of repetitions of the quantum channel
         N_s (int): number of shots
 
@@ -117,10 +122,10 @@ def quantum_circuit_with_L_reps(U_prep_description, channel_to_repeat_descriptio
 
     for L in tqdm(L_array):
         circuit_list = []
-        circuit_list.extend(three_qubit_circuit_assembler(U_prep_description, list_of_one_qubit_noises))
+        circuit_list.extend(three_qubit_circuit_assembler(U_prep_description, list_of_one_qubit_noises_for_prep_meas))
         for i in range(L):
-            circuit_list.extend(three_qubit_circuit_assembler(channel_to_repeat_description, list_of_one_qubit_noises))
-        circuit_list.extend(three_qubit_circuit_assembler(U_meas_description, list_of_one_qubit_noises))
+            circuit_list.extend(three_qubit_circuit_assembler(channel_to_repeat_description, list_of_one_qubit_noises_for_target))
+        circuit_list.extend(three_qubit_circuit_assembler(U_meas_description, list_of_one_qubit_noises_for_prep_meas))
 
         final_dm = quantum_circuit(initial_dm, circuit_list)
 
@@ -208,3 +213,57 @@ def get_dagger_subcircuit(subcircuit_description):
         idx = gate_description[1]
         subcircuit_dag.append(([[gate.dag()]], idx))
     return subcircuit_dag[::-1]
+
+
+def full_toffoli_experiment(list_of_one_qubit_noises_for_prep_meas, list_of_one_qubit_noises_target, L_max, N_s, K):
+    """
+    Experiment simulation, computes fidelity of Toff gate
+
+    Args:
+        list_of_one_qubit_noises_for_prep_meas (list(list(qutip.qobj.Qobj))): list of Kraus operators for each noise type acting on prep or measurement parts
+        list_of_one_qubit_noises_target (list(list(qutip.qobj.Qobj))): list of Kraus operators for each noise type acting on target gate
+        L_max (int): the maximum number of repetitions of the quantum channel
+        N_s (int): number of shots
+        K (int): number of superposition states
+
+    Returns:
+        fidelity (float): Toff fidelity
+        noisy_eig_array_nonsim (list): list of amplitudes of noisy eigenvals with nonsimilar eigenvals of initial states
+        noisy_eig_array_sim (list): list of amplitudes of noisy eigenvals with similar eigenvals of initial states
+    """
+
+    noisy_eig_array_nonsim = []
+    noisy_eig_array_sim = []
+
+    superposition_state_dict = get_Toff_superposition_preparation_subcircuit_dict()
+
+
+    for k in range(K):
+
+        state_str, U_prep_description = random.choice(list(superposition_state_dict.items()))
+
+        U_prep_description_ion = get_ion_subcircuit_description(U_prep_description)
+        U_meas_description_ion = get_dagger_subcircuit(U_prep_description_ion)
+
+        gate_to_repeat_description = [([[toffoli()]], [0, 1, 2])]
+        gate_to_repeat_description_ion = get_ion_subcircuit_description(gate_to_repeat_description)
+
+
+
+        L_array, measurements, prob = quantum_circuit_with_L_reps(U_prep_description_ion,
+                                                                  gate_to_repeat_description_ion,
+                                                                  U_meas_description_ion, list_of_one_qubit_noises_for_prep_meas,
+                                                                  list_of_one_qubit_noises_target, L_max, N_s)
+        if check_eig_similarity(state_str) == False:
+            noisy_eig_array_nonsim.append(get_noisy_eig_ampl(check_eig_similarity(state_str), measurements))
+        else:
+            noisy_eig_array_sim.append(get_noisy_eig_ampl(check_eig_similarity(state_str), measurements))
+
+    if len(noisy_eig_array_nonsim)!=0 and len(noisy_eig_array_sim)!=0:
+        fidelity = (np.array(noisy_eig_array_nonsim).mean()*49 + np.array(noisy_eig_array_nonsim).mean()*7)/56
+    elif len(noisy_eig_array_nonsim)==0:
+        fidelity = np.array(noisy_eig_array_nonsim).mean()
+    else:
+        fidelity = np.array(noisy_eig_array_sim).mean()
+
+    return fidelity, noisy_eig_array_nonsim, noisy_eig_array_sim
